@@ -6,10 +6,10 @@ const corsOptions = {
     credentials: true,
     optionSuccessStatus: 200,
 }
-app.use(cors(corsOptions))
+app.use(cors(corsOptions));
+app.use(express.json());
 
 require('dotenv').config();
-
 let port = process.env.PORT || 5000;
 
 
@@ -34,20 +34,44 @@ async function run() {
 
 
         app.get('/students', async (req, res) => {
-            let gender = req.query.category;
-            let className = req.query.className;
-            let classs={};
-             if (className && className !== 'null') classs.class = className;
-            if (gender === 'All Students') {
-                let result = await studentsCollection.find(classs).toArray();
-              return  res.send(result)
-            }
+            const page = parseInt(req.query.page) || 0;
+            const size = parseInt(req.query.size) || 10;
+            const gender = req.query.category;
+            const className = req.query.className;
+
             let query = {};
+
+            // Handle class filter
+            if (className && className !== 'null' && className !== 'Select Class') {
+                query.class = className;
+            }
+
+            // Handle gender filter only if it's not "All Students"
+            if (gender && gender !== 'All Students' && gender !== 'null') {
+                query.gender = gender;
+            }
+
+            // Pagination
+            const result = await studentsCollection
+                .find(query)
+                .skip(page * size)
+                .limit(size)
+                .toArray();
+
+            res.send(result);
+        });
+
+
+        app.get('/countStudents', async (req, res) => {
+            let gender = req.query.gender;
+            let className = req.query.className;
+            let query = {};
+
             if (gender && gender !== 'null') query.gender = gender;
             if (className && className !== 'null') query.class = className;
 
-            let result = await studentsCollection.find(query).toArray();
-            res.send(result)
+            let count = await studentsCollection.countDocuments(query);
+            res.send({ count });
         })
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
