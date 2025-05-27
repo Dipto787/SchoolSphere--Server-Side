@@ -16,7 +16,7 @@ require('dotenv').config();
 let port = process.env.PORT || 5000;
 
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.jt86e.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -52,9 +52,32 @@ async function run() {
         }
 
         let studentsCollection = client.db('School-Sphere').collection('students');
+        let MyClassRoomCollection = client.db('School-Sphere').collection('myClass');
+        let userCollection = client.db('School-Sphere').collection('users');
+        let isStudentCollection = client.db('School-Sphere').collection('student-request');
 
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();
+        let verifyStudent = async (req, res, next) => {
+            let email = req.decoded.email;
+            let student = await studentsCollection.findOne({ email });
+            const isStudent = student.isRegistration === true;
+            if (!isStudent) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            next();
+        }
+
+        let verifyAdmin = async (req, res, next) => {
+            let email = req.decoded.email;
+            let admin = await userCollection.findOne({ email });
+            let isAdmin = admin?.isAdmin === true;
+            if (!isAdmin) {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+            next();
+        }
+
 
         app.post('/jwt', (req, res) => {
             let user = req.body;
@@ -66,33 +89,6 @@ async function run() {
             }).send({ token });
         })
 
-        app.get('/students', verifyToken, async (req, res) => {
-            const page = parseInt(req.query.page) || 0;
-            const size = parseInt(req.query.size) || 10;
-            const gender = req.query.category;
-            const className = req.query.className;
-
-            let query = {};
-
-            // Handle class filter
-            if (className && className !== 'null' && className !== 'Select Class') {
-                query.class = className;
-            }
-
-            // Handle gender filter only if it's not "All Students"
-            if (gender && gender !== 'All Students' && gender !== 'null') {
-                query.gender = gender;
-            }
-
-            // Pagination
-            const result = await studentsCollection
-                .find(query)
-                .skip(page * size)
-                .limit(size)
-                .toArray();
-
-            res.send(result);
-        });
 
 
         app.get('/countStudents', verifyToken, async (req, res) => {
@@ -106,6 +102,168 @@ async function run() {
             let count = await studentsCollection.countDocuments(query);
             res.send({ count });
         })
+
+
+        app.get('/classRoom/:email', async (req, res) => {
+            let user = req.params.email;
+            console.log()
+            let query = { email: user };
+            let result = await MyClassRoomCollection.findOne(query);
+            res.send(result);
+
+        })
+
+        app.post('/students', async (req, res) => {
+            let students = req.body;
+            console.log('first,', students)
+             delete students._id;
+            let result = await isStudentCollection.insertOne(students);
+            res.send(result);
+
+        })
+
+
+        app.post('/students/admin', async (req, res) => {
+            let students = req.body;
+            console.log('posted user', students)
+            let result = await studentsCollection.insertOne(students);
+            res.send(result);
+
+        })
+
+        app.delete('/student/:email', async (req, res) => {
+            let email = req.params.email;
+            let query = { email };
+            let result = await isStudentCollection.deleteOne(query);
+            res.send(result);
+        })
+
+        app.delete('/students/:email', async (req, res) => {
+            let email = req.params.email; 
+            console.log('delete this')
+            let result = await studentsCollection.deleteOne({email});
+            res.send(result);
+        })
+
+
+        app.get('/student/:email', async (req, res) => {
+            let email = req.params.email;
+            let exit = await isStudentCollection.findOne({ email: email });
+            if (exit) {
+                return res.send(exit);
+            }
+
+            let result = await studentsCollection.findOne({ email });
+            res.send(result);
+
+        })
+
+        app.get('/students', verifyToken, async (req, res) => {
+            const page = parseInt(req.query.page) || 0;
+            const size = parseInt(req.query.size) || 10;
+            const gender = req.query.category;
+            console.log(gender)
+            const className = req.query.className;
+            console.log(className)
+            let query = {};
+            query.isRegistration = true;
+            // Handle class filter
+            if (className && className !== 'null' && className !== 'Select Class') {
+                query.className = className;
+            }
+
+            // Handle gender filter only if it's not "All Students"
+            if (gender && gender !== 'All Students' && gender !== 'null') {
+                query.gender = gender;
+            }
+
+
+
+            // Pagination
+            const result = await studentsCollection
+                .find(query)
+                .skip(page * size)
+                .limit(size)
+                .toArray();
+
+            res.send(result);
+        });
+
+
+
+        app.get('/students/admin', async (req, res) => {
+            let result = await isStudentCollection.find().toArray();
+            res.send(result);
+        })
+
+
+
+
+        app.patch('/student/:email', async (req, res) => {
+            let status = req.body;
+            let email = req.params.email;
+            let updateDoc = {
+                $set: {
+                    isRegistration: status?.status
+                }
+            }
+            let finding = await studentsCollection.updateOne({ email }, updateDoc);
+            res.send(finding);
+        })
+
+        app.patch('/students/:email', async (req, res) => {
+            let status = req.body;
+            let email = req.params.email;
+            let updateDoc = {
+                $set: {
+                    isRegistration: status?.status
+                }
+            }
+            let finding = await isStudentCollection.updateOne({ email }, updateDoc);
+            res.send(finding);
+        })
+
+
+
+        app.post('/user', async (req, res) => {
+            let user = req.body;
+            console.log('Incoming user:', user);
+
+            let isExist = await userCollection.findOne({ email: user.email });
+            if (isExist) {
+                return res.send({ message: 'already in database' });
+            }
+
+            let result = await userCollection.insertOne(user); // ← You were using findOne incorrectly
+            res.send(result);
+        });
+
+
+        app.get('/user/admin/:email', verifyToken, async (req, res) => {
+            let email = req.params.email;
+            if (email !== req.decoded.email) {
+                return res.send({ message: 'unauthorized access' })
+            }
+
+            let query = { email: email };
+            let result = await userCollection.findOne(query);
+
+            let admin = false;
+            if (result) {
+                admin = result?.isAdmin
+
+            }
+            console.log('fdf', admin)
+
+            res.send({ admin });
+        })
+
+
+        app.get('/users', async (req, res) => {
+            let result = await userCollection.find().toArray();
+            res.send(result);
+        })
+
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
