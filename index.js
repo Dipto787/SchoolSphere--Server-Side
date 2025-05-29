@@ -55,6 +55,7 @@ async function run() {
         let MyClassRoomCollection = client.db('School-Sphere').collection('myClass');
         let userCollection = client.db('School-Sphere').collection('users');
         let isStudentCollection = client.db('School-Sphere').collection('student-request');
+        let classRoutineSchedule = client.db('School-Sphere').collection('routine-schedule');
 
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();
@@ -116,7 +117,7 @@ async function run() {
         app.post('/students', async (req, res) => {
             let students = req.body;
             console.log('first,', students)
-             delete students._id;
+            delete students._id;
             let result = await isStudentCollection.insertOne(students);
             res.send(result);
 
@@ -131,17 +132,17 @@ async function run() {
 
         })
 
-        app.delete('/student/:email', async (req, res) => {
+        app.delete('/student/:email', verifyToken, verifyAdmin, async (req, res) => {
             let email = req.params.email;
             let query = { email };
             let result = await isStudentCollection.deleteOne(query);
             res.send(result);
         })
 
-        app.delete('/students/:email', async (req, res) => {
-            let email = req.params.email; 
+        app.delete('/students/:email', verifyToken, verifyAdmin, async (req, res) => {
+            let email = req.params.email;
             console.log('delete this')
-            let result = await studentsCollection.deleteOne({email});
+            let result = await studentsCollection.deleteOne({ email });
             res.send(result);
         })
 
@@ -199,7 +200,7 @@ async function run() {
 
 
 
-        app.patch('/student/:email', async (req, res) => {
+        app.patch('/student/:email', verifyToken, verifyAdmin, async (req, res) => {
             let status = req.body;
             let email = req.params.email;
             let updateDoc = {
@@ -211,7 +212,7 @@ async function run() {
             res.send(finding);
         })
 
-        app.patch('/students/:email', async (req, res) => {
+        app.patch('/students/:email', verifyToken, verifyAdmin, async (req, res) => {
             let status = req.body;
             let email = req.params.email;
             let updateDoc = {
@@ -261,6 +262,22 @@ async function run() {
 
         app.get('/users', async (req, res) => {
             let result = await userCollection.find().toArray();
+            res.send(result);
+        })
+
+
+        app.post('/routine-schedule', async (req, res) => {
+            let result = await classRoutineSchedule.insertOne(req.body);
+            res.send(result);
+        })
+
+        app.get('/routine-schedule', async (req, res) => {
+            let result = await classRoutineSchedule.find().toArray();
+            res.send(result);
+        })
+
+        app.delete('/routine-schedule/:id', async (req, res) => {
+            let result = await classRoutineSchedule.deleteOne({ _id: new ObjectId(req.params.id) });
             res.send(result);
         })
 
