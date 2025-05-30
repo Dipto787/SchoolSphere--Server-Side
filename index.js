@@ -276,10 +276,43 @@ async function run() {
             res.send(result);
         })
 
+        app.get('/routine-schedule/:id', async (req, res) => {
+            console.log('find this', req.params.id)
+            let query = { _id: new ObjectId(req.params.id) };
+            let result = await classRoutineSchedule.findOne(query);
+            res.send(result);
+        })
+
         app.delete('/routine-schedule/:id', async (req, res) => {
             let result = await classRoutineSchedule.deleteOne({ _id: new ObjectId(req.params.id) });
             res.send(result);
         })
+
+        app.put('/routine-schedule/:id', async (req, res) => {
+            console.log(req.body);
+            let id = req.params.id;
+            let query = { _id: new ObjectId(id) };
+
+            let updateDoc = {
+                $set: req.body
+            }
+            let result = await classRoutineSchedule.updateOne(query, updateDoc);
+            res.send(result);
+        })
+
+
+        app.get('/routine', async (req, res) => {
+            let category = req.query.category;
+            if (!category) {
+                return;
+            }
+
+            let query = { class: { $in: [category] } };
+            console.log(query, category)
+            let result = await classRoutineSchedule.findOne(query);
+            res.send(result);
+        })
+
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
