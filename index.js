@@ -56,13 +56,15 @@ async function run() {
         let userCollection = client.db('School-Sphere').collection('users');
         let isStudentCollection = client.db('School-Sphere').collection('student-request');
         let classRoutineSchedule = client.db('School-Sphere').collection('routine-schedule');
+        let examScheduleCollection = client.db('School-Sphere').collection('exam-schedule');
+        let userNotificationCollection = client.db('School-Sphere').collection('user-notification');
 
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();
         let verifyStudent = async (req, res, next) => {
             let email = req.decoded.email;
             let student = await studentsCollection.findOne({ email });
-            const isStudent = student.isRegistration === true;
+            const isStudent = student?.isRegistration === true;
             if (!isStudent) {
                 return res.status(403).send({ message: 'forbidden access' });
             }
@@ -105,7 +107,7 @@ async function run() {
         })
 
 
-        app.get('/classRoom/:email', async (req, res) => {
+        app.get('/classRoom/:email', verifyToken, async (req, res) => {
             let user = req.params.email;
             console.log()
             let query = { email: user };
@@ -114,7 +116,7 @@ async function run() {
 
         })
 
-        app.post('/students', async (req, res) => {
+        app.post('/students', verifyToken, async (req, res) => {
             let students = req.body;
             console.log('first,', students)
             delete students._id;
@@ -124,9 +126,10 @@ async function run() {
         })
 
 
-        app.post('/students/admin', async (req, res) => {
+        app.post('/students/admin', verifyToken, async (req, res) => {
             let students = req.body;
             console.log('posted user', students)
+            delete students._id;
             let result = await studentsCollection.insertOne(students);
             res.send(result);
 
@@ -147,7 +150,7 @@ async function run() {
         })
 
 
-        app.get('/student/:email', async (req, res) => {
+        app.get('/student/:email', verifyToken, async (req, res) => {
             let email = req.params.email;
             let exit = await isStudentCollection.findOne({ email: email });
             if (exit) {
@@ -163,23 +166,26 @@ async function run() {
             const page = parseInt(req.query.page) || 0;
             const size = parseInt(req.query.size) || 10;
             const gender = req.query.category;
-            console.log(gender)
             const className = req.query.className;
-            console.log(className)
+            console.log(gender, className)
             let query = {};
             query.isRegistration = true;
+            if (gender === undefined || className === undefined) {
+                const result = await studentsCollection.find(query).toArray();
+                return res.send(result);
+
+            }
+            console.log(className)
+
             // Handle class filter
-            if (className && className !== 'null' && className !== 'Select Class') {
+            if (className && className !== 'null' && !className !== undefined && className !== 'Select Class') {
                 query.className = className;
             }
 
             // Handle gender filter only if it's not "All Students"
-            if (gender && gender !== 'All Students' && gender !== 'null') {
+            if (gender && gender !== 'All Students' && gender !== undefined && gender !== 'null') {
                 query.gender = gender;
             }
-
-
-
             // Pagination
             const result = await studentsCollection
                 .find(query)
@@ -192,10 +198,13 @@ async function run() {
 
 
 
-        app.get('/students/admin', async (req, res) => {
+        app.get('/students/admin', verifyToken, verifyAdmin, async (req, res) => {
             let result = await isStudentCollection.find().toArray();
             res.send(result);
         })
+
+
+
 
 
 
@@ -266,29 +275,29 @@ async function run() {
         })
 
 
-        app.post('/routine-schedule', async (req, res) => {
+        app.post('/routine-schedule', verifyToken, verifyAdmin, async (req, res) => {
             let result = await classRoutineSchedule.insertOne(req.body);
             res.send(result);
         })
 
-        app.get('/routine-schedule', async (req, res) => {
+        app.get('/routine-schedule', verifyToken, async (req, res) => {
             let result = await classRoutineSchedule.find().toArray();
             res.send(result);
         })
 
-        app.get('/routine-schedule/:id', async (req, res) => {
+        app.get('/routine-schedule/:id', verifyToken, verifyStudent, async (req, res) => {
             console.log('find this', req.params.id)
             let query = { _id: new ObjectId(req.params.id) };
             let result = await classRoutineSchedule.findOne(query);
             res.send(result);
         })
 
-        app.delete('/routine-schedule/:id', async (req, res) => {
+        app.delete('/routine-schedule/:id', verifyToken, verifyAdmin, async (req, res) => {
             let result = await classRoutineSchedule.deleteOne({ _id: new ObjectId(req.params.id) });
             res.send(result);
         })
 
-        app.put('/routine-schedule/:id', async (req, res) => {
+        app.put('/routine-schedule/:id', verifyToken, verifyAdmin, async (req, res) => {
             console.log(req.body);
             let id = req.params.id;
             let query = { _id: new ObjectId(id) };
@@ -301,7 +310,7 @@ async function run() {
         })
 
 
-        app.get('/routine', async (req, res) => {
+        app.get('/routine', verifyToken, async (req, res) => {
             let category = req.query.category;
             if (!category) {
                 return;
@@ -313,6 +322,62 @@ async function run() {
             res.send(result);
         })
 
+        app.post('/exam-schedule', verifyToken, verifyAdmin, async (req, res) => {
+            let examInfo = req.body;
+            let exitSubject = await examScheduleCollection.findOne({ subject: examInfo.subject });
+            if (exitSubject) {
+                return res.send('exiting subject')
+            }
+            let result = await examScheduleCollection.insertOne(examInfo);
+            res.send(result);
+        })
+
+        app.get('/exam-schedule', verifyToken, async (req, res) => {
+
+            let className = req.query.className;
+            if (!className) {
+                let result = await examScheduleCollection.find().toArray();
+                return res.send(result);
+            }
+
+            let query = { className };
+            let result = await examScheduleCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        app.delete('/exam-schedule/:id', verifyToken, verifyAdmin, async (req, res) => {
+            let id = req.params.id;
+
+            let query = { _id: new ObjectId(id) };
+            let result = await examScheduleCollection.deleteOne(query)
+            res.send(result);
+        })
+
+        app.post('/user-notification', verifyToken, verifyAdmin, async (req, res) => {
+            let notification = req.body;
+            let query = { subject: notification.subject }
+            let exitSubject = await userNotificationCollection.findOne(query);
+            console.log('hi jan', exitSubject === true)
+            if (exitSubject === true) {
+                return res.send('exiting subject')
+            }
+            let result = await userNotificationCollection.insertOne(notification);
+            res.send(result);
+
+        })
+        app.get('/user-notification', verifyToken, async (req, res) => {
+
+            let result = await userNotificationCollection.find().toArray();
+            res.send(result);
+
+        })
+
+        app.delete('/user-notification/:id', verifyToken, verifyStudent, async (req, res) => {
+            let id = req.params.id;
+            let query = { _id: new ObjectId(id) };
+            let result = await userNotificationCollection.deleteOne(query);
+            res.send(result);
+        })
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
